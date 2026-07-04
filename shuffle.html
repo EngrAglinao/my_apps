@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Shuffler with Constraints</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        /* Custom styles to guarantee strict black/white header rule overrides */
+        .faci-header {
+            background-color: #000000 !important;
+            color: #ffffff !important;
+        }
+        .member-row {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen py-10 px-4 font-sans text-gray-800">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">Group Shuffler</h1>
+            <p class="mt-2 text-sm text-gray-600">
+                Use <span class="font-mono bg-gray-200 px-1 rounded">*</span> for facilitators, and <span class="font-mono bg-gray-200 px-1 rounded">and</span> for married couples.
+            </p>
+        </header>
+
+        <div class="bg-white p-6 rounded-xl shadow-xs border border-gray-200 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div class="md:col-span-2">
+                    <label for="nameList" class="block text-sm font-semibold text-gray-700 mb-2">Names List (One per line)</label>
+                    <textarea id="nameList" rows="10" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent font-mono text-sm" placeholder="John*&#10;Mark and Sarah&#10;David&#10;Rachel*&#10;James and Emily&#10;Michael"></textarea>
+                </div>
+
+                <div class="flex flex-col justify-between">
+                    <div>
+                        <label for="groupCount" class="block text-sm font-semibold text-gray-700 mb-2">Number of Groups</label>
+                        <input type="number" id="groupCount" min="1" value="3" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent mb-4">
+                        
+                        <div class="text-xs text-gray-500 bg-gray-100 p-3 rounded-lg space-y-1">
+                            <p class="font-semibold text-gray-700">Quick Rules:</p>
+                            <p>• Facilitators stay at the top row.</p>
+                            <p>• Couples stay in the same table.</p>
+                            <p>• Delete members natively post-generation.</p>
+                        </div>
+                    </div>
+
+                    <button onclick="generateGroups()" class="w-full mt-6 bg-black text-white hover:bg-gray-800 font-bold py-3 px-4 rounded-lg transition duration-200 cursor-pointer text-center">
+                        Generate Groups
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <div id="groupsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+    </div>
+
+    <script>
+        // Global state to hold currently generated groups data
+        let currentGroups = [];
+
+        function generateGroups() {
+            const text = document.getElementById('nameList').value.trim();
+            const numGroups = parseInt(document.getElementById('groupCount').value) || 1;
+            
+            if (!text) {
+                alert("Please enter some names first.");
+                return;
+            }
+
+            // Split into non-empty lines
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            
+            let facilitators = [];
+            let members = [];
+
+            // Parse lines based on criteria
+            lines.forEach(line => {
+                const isFacilitator = line.includes('*');
+                const cleanName = line.replace('*', '').trim();
+                
+                // Track standard weight (couples weigh 2, singles weigh 1)
+                const weight = cleanName.toLowerCase().includes(' and ') ? 2 : 1;
+
+                const entity = {
+                    originalText: line,
+                    displayName: cleanName,
+                    weight: weight
+                };
+
+                if (isFacilitator) {
+                    facilitators.push(entity);
+                } else {
+                    members.push(entity);
+                }
+            });
+
+            // Randomize arrays
+            shuffleArray(facilitators);
+            shuffleArray(members);
+
+            // Initialize structural groups
+            currentGroups = Array.from({ length: numGroups }, (_, i) => ({
+                id: i,
+                facilitators: [],
+                members: [],
+                totalWeight: 0
+            }));
+
+            // 1. Distribute Facilitators evenly
+            facilitators.forEach((faci, index) => {
+                const targetGroup = currentGroups[index % numGroups];
+                targetGroup.facilitators.push(faci);
+                targetGroup.totalWeight += faci.weight;
+            });
+
+            // 2. Distribute Members aiming to balance weights
+            members.forEach(member => {
+                // Sort groups by current weight to always give the next item to the smallest group
+                currentGroups.sort((a, b) => a.totalWeight - b.totalWeight);
+                currentGroups[0].members.push(member);
+                currentGroups[0].totalWeight += member.weight;
+            });
+
+            // Re-sort back by ID so order doesn't look totally random
+            currentGroups.sort((a, b) => a.id - b.id);
+
+            renderTables();
+        }
+
+        // Standard Fisher-Yates Shuffle implementation
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // Render groups state directly into customized structural layout
+        function renderTables() {
+            const container = document.getElementById('groupsContainer');
+            container.innerHTML = '';
+
+            currentGroups.forEach(group => {
+                // Outer wrapper div
+                const tableWrapper = document.createElement('div');
+                tableWrapper.className = "bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden h-fit";
+
+                // Generate HTML table structure
+                const table = document.createElement('table');
+                table.className = "w-full text-left border-collapse";
+
+                // Handle the header / Facilitator row
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                headerRow.className = "faci-header";
+
+                const th = document.createElement('th');
+                th.setAttribute('colspan', '2');
+                th.className = "px-4 py-3 text-sm font-bold uppercase tracking-wider text-center";
+                
+                // Format string display for zero, one, or multiple facilitators assigned
+                if (group.facilitators.length > 0) {
+                    th.innerText = `👑 Facilitator: ${group.facilitators.map(f => f.displayName).join(' & ')}`;
+                } else {
+                    th.innerText = "No Facilitator Assigned";
+                }
+                headerRow.appendChild(th);
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                // Handle table body / normal member rows
+                const tbody = document.createElement('tbody');
+
+                if (group.members.length === 0) {
+                    const emptyRow = document.createElement('tr');
+                    emptyRow.className = "member-row border-b border-gray-100 text-center";
+                    emptyRow.innerHTML = `<td colspan="2" class="px-4 py-4 text-sm text-gray-400 italic">No members remaining</td>`;
+                    tbody.appendChild(emptyRow);
+                } else {
+                    group.members.forEach((member, index) => {
+                        const tr = document.createElement('tr');
+                        tr.className = "member-row border-b border-gray-100 hover:bg-gray-50 transition";
+
+                        // Name block cell
+                        const tdName = document.createElement('td');
+                        tdName.className = "px-4 py-3 text-sm font-medium";
+                        tdName.innerText = member.displayName;
+
+                        // Delete action button cell
+                        const tdAction = document.createElement('td');
+                        tdAction.className = "px-4 py-3 text-right text-sm";
+                        
+                        const removeBtn = document.createElement('button');
+                        removeBtn.innerHTML = '&times;';
+                        removeBtn.className = "text-gray-400 hover:text-red-600 font-bold text-lg px-2 focus:outline-none transition cursor-pointer";
+                        removeBtn.title = "Remove from group";
+                        removeBtn.onclick = () => removeMember(group.id, index);
+
+                        tdAction.appendChild(removeBtn);
+                        tr.appendChild(tdName);
+                        tr.appendChild(tdAction);
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                table.appendChild(tbody);
+                tableWrapper.appendChild(table);
+                container.appendChild(tableWrapper);
+            });
+        }
+
+        // Target and remove specific individual/couples dynamically without recalculating global shuffles
+        function removeMember(groupId, memberIndex) {
+            const group = currentGroups.find(g => g.id === groupId);
+            if (group) {
+                const removed = group.members.splice(memberIndex, 1)[0];
+                group.totalWeight -= removed.weight;
+                renderTables();
+            }
+        }
+    </script>
+</body>
+</html>
